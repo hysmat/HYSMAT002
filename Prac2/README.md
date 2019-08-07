@@ -1,4 +1,4 @@
-# Changes
+# Notes
 
 
 I added a loop that checks if the output data is correct and then adds the number of errors next to the time in the csv file (I also added the value of the minimum acceptable error).
