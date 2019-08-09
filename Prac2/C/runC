@@ -1,0 +1,9 @@
+#!/bin/bash
+#% cd C
+echo "Running C-Unthreaded\n BTWs I'm gunna re compile you code (but I wont run '$ make clean')";
+make;
+for i in {1..60};
+	do
+	echo "---------------------------------$i----------------------------------"
+	make run;
+done
