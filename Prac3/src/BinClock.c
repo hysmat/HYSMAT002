@@ -22,6 +22,20 @@ long lastInterruptTime = 0; //Used for button debounce
 int RTC; //Holds the RTC instance
 
 int HH,MM,SS;
+
+
+// Function declarations
+void turnOffOscillator(void);
+void turnOnOscillator(void);
+// Write functions
+int write12Hour(int value, int pm);
+int writeMin(int value);
+int writeSec(int Value);
+// Get Functions
+int getHour(void);
+int getMin(void);
+int getSec(void);
+
 void initGPIO(void){
 	/*
 	 * Sets GPIO using wiringPi pins. see pinout.xyz for specific wiringPi pins
@@ -61,56 +75,43 @@ void initGPIO(void){
 
 void initRTC()
 {
-	// set to 12 hour time
+	// set to 12 hour time am
 	wiringPiI2CWriteReg8(RTC,HOUR, 0b01000000);
 	// start clock
 	wiringPiI2CWriteReg8(RTC,SEC, 0b10000000);
 }
+
 
 /*
  * The main function
  * This function is called, and calls all relevant functions we've written
  */
 int main(void){
+
 	initGPIO();
 	initRTC();
-	//Set random time (3:04PM)
+	//Set random time (3:04)
 	//You can comment this file out later
-	wiringPiI2CWriteReg8(RTC, HOUR, (0x13+TIMEZONE) | 0b01000000);
-	wiringPiI2CWriteReg8(RTC, MIN, 0x4);
-	wiringPiI2CWriteReg8(RTC, SEC, 0x00 | 0b10000000);
-
-	/*
-	// Check the LEDs
-	delay(2000);
-	for(int i = 0; i < sizeof(HOURPINS)/sizeof(HOURPINS[0]); i++){
-            digitalWrite(HOURPINS[i], 1);
-	    delay(500);
-	    digitalWrite(HOURPINS[i], 0);
-        }
-
-	for(int i = 0; i < sizeof(MINPINS)/sizeof(MINPINS[0]); i++){
-            digitalWrite(MINPINS[i], 1);
-            delay(500);
-            digitalWrite(MINPINS[i], 0);
-        }
-	*/
-
+	write12Hour(1,0);
+	writeMin(1);
+	writeSec(1);
 	// Repeat this until we shut down
 	for (;;){
-		//Fetch the time from the RTC
-		//Write your logic here
+	//Fetch the time from the RTC
+	secs = getSec();
+	mins = getMin();
+	hours = getHour();
+	//Write your logic here
 
-		//Function calls to toggle LEDs
-		//Write your logic here
-
-
+	//Function calls to toggle LEDs
+	//Write your logic here
 
 	//max value for pwm is 1042
-	secs = wiringPiI2CReadReg8(RTC, SEC) & 0b01111111;
+	//secs = wiringPiI2CReadReg8(RTC, SEC) & 0b01111111;
+	secs = getSec();
 	// Print out the time we have stored on our RTC
-	printf("The current time is: %x:%x:%x\n", hours, mins, secs);
-
+	printf("The current time is: %d:%d:%d\n", hours, mins, secs);
+	secPWM(secs);
 	//using a delay to make program less cpu hungry
 	delay(1000); //milliseconds
     	}
@@ -222,11 +223,17 @@ void hourInc(void){
 	//printf("Hours");
 	if (interruptTime - lastInterruptTime>200){
 		//Fetch RTC Time
-		hours = hFormat((int)wiringPiI2CReadReg8(RTC, HOUR));
+		hours = getHour();
+		hours++;
 		//Increase hours by 1, ensuring not to overflow
+		if(hours == 13)
+		{
+			hours = 0;
+		}
+		printf("%d", hours);
 		//Write hours back to the RTC
-
-		printf("Hour = %x\n", hours);
+		write12Hour(hours, 0);
+		//printf("Hour = %x\n", hours);
 	}
 	lastInterruptTime = interruptTime;
 }
@@ -242,10 +249,17 @@ void minInc(void){
 	//printf("Minutes");
 	if (interruptTime - lastInterruptTime>200){
 		//Fetch RTC Time
-		mins = wiringPiI2CReadReg8(RTC, MIN);
+		mins = getMin();
 		//Increase minutes by 1, ensuring not to overflow
+		mins++;
+                //Increase hours by 1, ensuring not to overflow
+                if(mins >= 60)
+                {
+                        mins = 0;
+                }
 		//Write minutes back to the RTC
-		printf("Minutes = %x\n", mins);
+		writeMin(mins);
+		//printf("Minutes = %x\n", mins);
 	}
 	lastInterruptTime = interruptTime;
 }
@@ -273,3 +287,124 @@ void toggleTime(void){
 	}
 	lastInterruptTime = interruptTime;
 }
+
+
+//Added functions to make things easyer.
+
+
+void turnOffOscillator(void)
+{
+	int currentTime = wiringPiI2CReadReg8(RTC, 0x00);
+	wiringPiI2CWriteReg8(RTC, 0x00, (currentTime & 0b01111111));
+	//printf("Waiting for oscilator to stop");
+	while ((wiringPiI2CReadReg8(RTC, 0x03) & 0b00100000) == 0b00100000)
+	{ }
+}
+
+void turnOnOscillator(void)
+{
+	int currentTime = wiringPiI2CReadReg8(RTC, 0x00);
+	wiringPiI2CWriteReg8(RTC, 0x00, (currentTime | 0b10000000));
+}
+
+/*
+ * Write 12 Hour
+ * Writes the hour to the RTC, taking into account that bits 6,5 hold hour info and
+ * you soulden't write to bit 7.
+ *
+ * Defult is set to am. To set pm pass 1 for pm.
+ */
+int write12Hour(int value, int pm)
+{
+	// check if hour is valid
+	if (value > 12) 
+		return 1;
+	turnOffOscillator();
+	int units = (value % 10);
+	int tens = value/10 << 4;
+	int regValue = 0b00000000 | (units+ tens);
+	if (pm)
+		regValue |= 0b00100000;
+	else
+		regValue &= 0b00011111;
+	//end if (pm)
+
+	regValue &= 0b01111111;
+	wiringPiI2CWriteReg8(RTC, 0x02, regValue);
+	turnOnOscillator();
+	return 0;
+} // end Write Hour
+
+
+/*
+ * Write min
+ * Writes the minutes to the RTC.
+ */
+int writeMin(int value)
+{
+	if (value > 59)
+		return 1;
+	turnOffOscillator();
+        int units = (value % 10);
+        int tens = (value/10) << 4;
+        int regValue = 0b00000000 | (units +tens) ;
+	regValue &= 0b01111111;
+        wiringPiI2CWriteReg8(RTC, 0x01, regValue);
+	turnOnOscillator();
+	return 0;
+} // end writeMin
+
+/*
+ * Write sec
+ * Writes the seconds to the RTC.
+ */
+int writeSec(int value)
+{
+        if (value > 59)
+                return 1;
+        turnOffOscillator();
+        int units = (value % 10);
+        int tens = (value/10) << 4;
+        int regValue = 0b00000000 | (units +tens) ;
+        regValue &= 0b01111111;
+        wiringPiI2CWriteReg8(RTC, 0x00, regValue);
+        turnOnOscillator();
+        return 0;
+} // end writeSec
+
+
+/*
+ *Get Hour
+ *Fetches and converts the current hour from the RTC
+ */
+int getHour(void)
+{
+	//Fetch the hour and accomidate for the other information stored in the hours register.
+	int num = wiringPiI2CReadReg8(RTC, 0x02) & 0b00011111;
+        int result =((num & 0b01110000)>>4)*10 + (num & 0x0F);
+	return (int)result;
+} // end getHour
+
+/*
+ *Get Min
+ *Fetches and converts the current min from the RTC
+ */
+int getMin(void)
+{
+        //Fetch the minute  and accomidate for the other information stored in the hours register.
+        int num = wiringPiI2CReadReg8(RTC, 0x01) & 0b01111111;
+        int result =((num & 0b01110000)>>4)*10 + (num & 0x0F);
+        return (int)result;
+}
+
+/*
+ *Get sec
+ *Fetches and converts the current second from the RTC
+ */
+int getSec(void)
+{
+        //Fetch the second and accomidate for the other information stored in the hours register.
+        int num = wiringPiI2CReadReg8(RTC, 0x00) & 0b01111111;
+        int result =((num & 0b01110000)>>4)*10 + (num & 0x0F);
+        return result;
+} // end getSec
