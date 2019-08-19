@@ -12,8 +12,6 @@
 #include <wiringPiI2C.h>
 #include <stdio.h> //For printf functions
 #include <stdlib.h> // For system functions
-#include <errno.h>
-#include <math.h>
 
 #include "BinClock.h"
 #include "CurrentTime.h"
@@ -55,11 +53,10 @@ void initGPIO(void){
 	}
 
 
-    for(int i = 0; i < sizeof(MINPINS)/sizeof(MINPINS[0]); i++){
-        pinMode(MINPINS[i], OUTPUT);
-    }
-
-    //Set Up the Seconds LED for PWM
+	 for(int i = 0; i < sizeof(MINPINS)/sizeof(MINPINS[0]); i++){
+            pinMode(MINPINS[i], OUTPUT);
+        }
+	//Set Up the Seconds LED for PWM
 	pinMode(SECS, PWM_OUTPUT);
 	printf("LEDS done\n");
 
@@ -84,22 +81,6 @@ void initRTC()
 	wiringPiI2CWriteReg8(RTC,SEC, 0b10000000);
 }
 
-void cleanUpGPIO(void){
-    printf("Cleaning up GPIO");
-
-	//Reset LED lines to input
-	for(int i = 0; i < sizeof(HOURPINS)/sizeof(HOURPINS[0]); i++){
-	    pinMode(HOURPINS[i], INPUT);
-	}
-
-
-    for(int i = 0; i < sizeof(MINPINS)/sizeof(MINPINS[0]); i++){
-        pinMode(MINPINS[i], INPUT);
-    }
-
-    //Reset SECS line to input
-    pinMode(SECS, INPUT);
-}
 
 /*
  * The main function
@@ -107,38 +88,32 @@ void cleanUpGPIO(void){
  */
 int main(void){
 
-
 	initGPIO();
-    cleanUpGPIO();
-    initGPIO();
-    printf("begin RTC init");
 	initRTC();
-    printf("finish RTC init");
 	//Set random time (3:04)
 	//You can comment this file out later
 	write12Hour(1,0);
-	writeMin(1);
+	writeMin(54);
 	writeSec(1);
 	// Repeat this until we shut down
 	for (;;){
-    	//Fetch the time from the RTC
-	    secs = getSec();
-    	mins = getMin();
-    	hours = getHour();
-	    //Write your logic here
+	//Fetch the time from the RTC
+	secs = getSec();
+	mins = getMin();
+	hours = getHour();
+	//Write your logic here
 
-	    //Function calls to toggle LEDs
-	    lightHours(hours);
-        lightMins(mins);
+	//Function calls to toggle LEDs
+	//Write your logic here
 
-    	//max value for pwm is 1042
-    	//secs = wiringPiI2CReadReg8(RTC, SEC) & 0b01111111;
-	    //secs = getSec();
-    	// Print out the time we have stored on our RTC
-    	printf("The current time is: %d:%d:%d\n", hours, mins, secs);
-    	secPWM(secs);
-	    //using a delay to make program less cpu hungry
-	    delay(1000); //milliseconds
+	//max value for pwm is 1042
+	//secs = wiringPiI2CReadReg8(RTC, SEC) & 0b01111111;
+	secs = getSec();
+	// Print out the time we have stored on our RTC
+	printf("The current time is: %d:%d:%d\n", hours, mins, secs);
+	secPWM(secs);
+	//using a delay to make program less cpu hungry
+	delay(1000); //milliseconds
     	}
 	return 0;
 }
@@ -160,22 +135,14 @@ int hFormat(int hours){
  * Turns on corresponding LED's for hours
  */
 void lightHours(int units){
-	for(int i = 0; i < 4; i++){
-        int binPow = pow(2, 3-i);
-        digitalWrite(HOURPINS[i], units/binPow);
-        units %= binPow;
-    }
+	// Write your logic to light up the hour LEDs here
 }
 
 /*
  * Turn on the Minute LEDs
  */
 void lightMins(int units){
-	for(int i = 0; i < 6; i++){
-        int binPow = pow(2, 5-i);
-        digitalWrite(MINPINS[i], units/binPow);
-        units %= binPow;
-    }
+	//Write your logic to light up the minute LEDs here
 }
 
 /*
@@ -266,7 +233,6 @@ void hourInc(void){
 		printf("%d", hours);
 		//Write hours back to the RTC
 		write12Hour(hours, 0);
-		lightHours(hours);
 		//printf("Hour = %x\n", hours);
 	}
 	lastInterruptTime = interruptTime;
@@ -293,7 +259,6 @@ void minInc(void){
                 }
 		//Write minutes back to the RTC
 		writeMin(mins);
-		lightMins(mins);
 		//printf("Minutes = %x\n", mins);
 	}
 	lastInterruptTime = interruptTime;
