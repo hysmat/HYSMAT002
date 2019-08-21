@@ -109,20 +109,30 @@ int main(void){
 
 
 	initGPIO();
-    cleanUpGPIO();
-    initGPIO();
-    printf("begin RTC init");
+	cleanUpGPIO();
+    	initGPIO();
+    	printf("begin RTC init");
 	initRTC();
-    printf("finish RTC init");
-	//Set random time (3:04)
-	//You can comment this file out later
-	write12Hour(1,0);
-	writeMin(1);
-	writeSec(1);
+    	printf("finish RTC init");
+
+	// get the current time
+	getCurrentTime();
+	secs = getSecs();
+	mins = getMins();
+	hours = getHours();
+	// compensate for if hours is in 24 hour time.
+	if (hours > 12)
+	{
+		hours = hours - 12;
+	}
+	// write the current time to the RTC.
+	write12Hour(hours, 0);
+	writeMin(mins);
+	writeSec(secs);
 	// Repeat this until we shut down
 	for (;;){
     	//Fetch the time from the RTC
-	    secs = getSec();
+	secs = getSec();
     	mins = getMin();
     	hours = getHour();
 	    //Write your logic here
@@ -141,19 +151,6 @@ int main(void){
 	    delay(1000); //milliseconds
     	}
 	return 0;
-}
-/*
- * Change the hour format to 12 hours
- */
-int hFormat(int hours){
-	/*formats to 12h*/
-	if (hours >= 24){
-		hours = 0;
-	}
-	else if (hours > 12){
-		hours -= 12;
-	}
-	return (int)hours;
 }
 
 /*
@@ -189,62 +186,6 @@ void secPWM(int units){
 }
 
 /*
- * hexCompensation
- * This function may not be necessary if you use bit-shifting rather than decimal checking for writing out time values
- */
-int hexCompensation(int units){
-	/*Convert HEX or BCD value to DEC where 0x45 == 0d45
-	  This was created as the lighXXX functions which determine what GPIO pin to set HIGH/LOW
-	  perform operations which work in base10 and not base16 (incorrect logic)
-	*/
-	int unitsU = units%0x10;
-
-	if (units >= 0x50){
-		units = 50 + unitsU;
-	}
-	else if (units >= 0x40){
-		units = 40 + unitsU;
-	}
-	else if (units >= 0x30){
-		units = 30 + unitsU;
-	}
-	else if (units >= 0x20){
-		units = 20 + unitsU;
-	}
-	else if (units >= 0x10){
-		units = 10 + unitsU;
-	}
-	return units;
-}
-
-
-/*
- * decCompensation
- * This function "undoes" hexCompensation in order to write the correct base 16 value through I2C
- */
-int decCompensation(int units){
-	int unitsU = units%10;
-
-	if (units >= 50){
-		units = 0x50 + unitsU;
-	}
-	else if (units >= 40){
-		units = 0x40 + unitsU;
-	}
-	else if (units >= 30){
-		units = 0x30 + unitsU;
-	}
-	else if (units >= 20){
-		units = 0x20 + unitsU;
-	}
-	else if (units >= 10){
-		units = 0x10 + unitsU;
-	}
-	return units;
-}
-
-
-/*
  * hourInc
  * Fetch the hour value off the RTC, increase it by 1, and write back
  * Be sure to cater for there only being 23 hours in a day
@@ -259,9 +200,9 @@ void hourInc(void){
 		hours = getHour();
 		hours++;
 		//Increase hours by 1, ensuring not to overflow
-		if(hours == 13)
+		if(hours > 12)
 		{
-			hours = 0;
+			hours = 1;
 		}
 		printf("%d", hours);
 		//Write hours back to the RTC
@@ -299,31 +240,6 @@ void minInc(void){
 	lastInterruptTime = interruptTime;
 }
 
-//This interrupt will fetch current time from another script and write it to the clock registers
-//This functions will toggle a flag that is checked in main
-void toggleTime(void){
-	long interruptTime = millis();
-
-	if (interruptTime - lastInterruptTime>200){
-		HH = getHours();
-		MM = getMins();
-		SS = getSecs();
-
-		HH = hFormat(HH);
-		HH = decCompensation(HH);
-		wiringPiI2CWriteReg8(RTC, HOUR, HH);
-
-		MM = decCompensation(MM);
-		wiringPiI2CWriteReg8(RTC, MIN, MM);
-
-		SS = decCompensation(SS);
-		wiringPiI2CWriteReg8(RTC, SEC, 0b10000000+SS);
-
-	}
-	lastInterruptTime = interruptTime;
-}
-
-
 //Added functions to make things easyer.
 
 
@@ -352,7 +268,7 @@ void turnOnOscillator(void)
 int write12Hour(int value, int pm)
 {
 	// check if hour is valid
-	if (value > 12) 
+	if (value > 12)
 		return 1;
 	turnOffOscillator();
 	int units = (value % 10);
@@ -415,9 +331,9 @@ int writeSec(int value)
 int getHour(void)
 {
 	//Fetch the hour and accomidate for the other information stored in the hours register.
-	int num = wiringPiI2CReadReg8(RTC, 0x02) & 0b00011111;
+        int num = wiringPiI2CReadReg8(RTC, 0x02) & 0b00011111;
         int result =((num & 0b01110000)>>4)*10 + (num & 0x0F);
-	return (int)result;
+        return (int)result;
 } // end getHour
 
 /*
@@ -443,3 +359,4 @@ int getSec(void)
         int result =((num & 0b01110000)>>4)*10 + (num & 0x0F);
         return result;
 } // end getSec
+
